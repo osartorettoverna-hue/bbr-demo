@@ -46,7 +46,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Shared state (single-user demo — no DB needed)
 # ---------------------------------------------------------------------------
-current_scenario: dict = {"delay_ms": None, "loss_pct": None, "applied": False}
+current_scenario: dict = {"delay_ms": None, "loss_pct": None, "bandwidth_mbps": None, "applied": False}
 all_results: list[dict] = []
 test_running: bool = False
 
@@ -124,18 +124,21 @@ async def get_status():
 class ScenarioRequest(BaseModel):
     delay_ms: float = Field(ge=0, le=500)
     loss_pct: float = Field(ge=0, le=10)
+    bandwidth_mbps: Optional[float] = Field(default=None, ge=1, le=1000)
 
 
 @app.post("/api/scenario")
 async def apply_scenario(req: ScenarioRequest):
     half_ms = req.delay_ms / 2
     loss = req.loss_pct
+    bw = req.bandwidth_mbps  # None = unlimited
 
     def _netem(container: str, delay: float, apply_loss: bool) -> str:
         loss_part = f" loss {loss:.2f}%" if apply_loss else ""
+        rate_part = f" rate {bw:.0f}mbit" if bw and bw < 1000 else ""
         return (
             f"tc qdisc del dev eth0 root 2>/dev/null || true; "
-            f"tc qdisc add dev eth0 root netem delay {delay:.1f}ms{loss_part}"
+            f"tc qdisc add dev eth0 root netem delay {delay:.1f}ms{loss_part}{rate_part}"
         )
 
     try:
@@ -149,6 +152,7 @@ async def apply_scenario(req: ScenarioRequest):
 
         current_scenario["delay_ms"] = req.delay_ms
         current_scenario["loss_pct"] = req.loss_pct
+        current_scenario["bandwidth_mbps"] = bw
         current_scenario["applied"] = True
         return {"ok": True, "scenario": current_scenario}
 

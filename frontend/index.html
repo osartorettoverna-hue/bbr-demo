@@ -33,6 +33,19 @@
         <h2>Scenario di rete</h2>
       </div>
 
+      <!-- Tipo di canale -->
+      <div class="channel-type-row">
+        <span class="channel-type-label">Tipo di canale</span>
+        <div class="channel-btns" id="channel-btns">
+          <button class="btn-channel" data-channel="fibra">Fibra (1 Gbps)</button>
+          <button class="btn-channel" data-channel="wifi">WiFi (100 Mbps)</button>
+          <button class="btn-channel" data-channel="adsl">ADSL (20 Mbps)</button>
+          <button class="btn-channel" data-channel="lte">4G/LTE (50 Mbps)</button>
+          <button class="btn-channel" data-channel="satellite">Satellite (5 Mbps)</button>
+          <button class="btn-channel btn-channel--custom active" data-channel="custom">Personalizzato</button>
+        </div>
+      </div>
+
       <div class="sliders-row">
         <div class="slider-group">
           <div class="slider-label">
@@ -50,6 +63,15 @@
           </div>
           <input type="range" id="loss-slider" min="0" max="10" step="0.1" value="1" class="slider">
           <div class="slider-hints"><span>0%</span><span>10%</span></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-label">
+            <span>Capacità del canale</span>
+            <strong class="slider-value" id="bw-val">1 Gbps</strong>
+          </div>
+          <input type="range" id="bw-slider" min="1" max="1000" step="1" value="1000" class="slider slider--bw">
+          <div class="slider-hints"><span>1 Mbps</span><span>1 Gbps</span></div>
         </div>
       </div>
 
@@ -219,7 +241,7 @@
         <table class="results-table" id="results-table">
           <thead>
             <tr>
-              <th>Scenario</th>
+              <th>Scenario (RTT / Loss / Banda)</th>
               <th class="col-cubic">CUBIC (Mbps)</th>
               <th class="col-bbr">BBR (Mbps)</th>
               <th>Ratio BBR/CUBIC</th>

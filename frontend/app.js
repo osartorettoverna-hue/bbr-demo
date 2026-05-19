@@ -3,8 +3,16 @@
 // ═══════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════
+const CHANNEL_PRESETS = {
+  fibra:     { delay_ms: 1,   loss_pct: 0,   bandwidth_mbps: 1000, label: 'Fibra ottica' },
+  wifi:      { delay_ms: 10,  loss_pct: 0.5, bandwidth_mbps: 100,  label: 'WiFi' },
+  adsl:      { delay_ms: 30,  loss_pct: 0.1, bandwidth_mbps: 20,   label: 'ADSL' },
+  lte:       { delay_ms: 40,  loss_pct: 1.0, bandwidth_mbps: 50,   label: '4G/LTE' },
+  satellite: { delay_ms: 600, loss_pct: 2.0, bandwidth_mbps: 5,    label: 'Satellite' },
+};
+
 const state = {
-  scenario: { delay_ms: 50, loss_pct: 1.0, applied: false },
+  scenario: { delay_ms: 50, loss_pct: 1.0, bandwidth_mbps: 1000, applied: false },
   testRunning: false,
   ws: null,
   activeAlgo: null,           // 'cubic' | 'bbr'
@@ -30,6 +38,9 @@ const dom = {
   delayVal:     $('delay-val'),
   lossSlider:   $('loss-slider'),
   lossVal:      $('loss-val'),
+  bwSlider:     $('bw-slider'),
+  bwVal:        $('bw-val'),
+  channelBtns:  $('channel-btns'),
   applyBtn:     $('apply-btn'),
   scenarioDot:  $('scenario-dot'),
   scenarioText: $('scenario-text'),
@@ -234,16 +245,56 @@ function chartPush(algo, t, mbps, rttMs) {
 // ═══════════════════════════════════════════════
 // SLIDERS
 // ═══════════════════════════════════════════════
+function bwLabel(mbps) {
+  return mbps >= 1000 ? '1 Gbps' : `${mbps} Mbps`;
+}
+
+function setChannelActive(key) {
+  dom.channelBtns.querySelectorAll('.btn-channel').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.channel === key);
+  });
+}
+
+function applyPreset(key) {
+  const p = CHANNEL_PRESETS[key];
+  if (!p) return;
+  dom.delaySlider.value = p.delay_ms;
+  dom.delayVal.textContent = `${p.delay_ms} ms`;
+  state.scenario.delay_ms = p.delay_ms;
+  dom.lossSlider.value = p.loss_pct;
+  dom.lossVal.textContent = `${p.loss_pct.toFixed(1)} %`;
+  state.scenario.loss_pct = p.loss_pct;
+  dom.bwSlider.value = p.bandwidth_mbps;
+  dom.bwVal.textContent = bwLabel(p.bandwidth_mbps);
+  state.scenario.bandwidth_mbps = p.bandwidth_mbps;
+  setChannelActive(key);
+}
+
 function initSliders() {
   dom.delaySlider.addEventListener('input', () => {
     const v = parseInt(dom.delaySlider.value);
     dom.delayVal.textContent = `${v} ms`;
     state.scenario.delay_ms = v;
+    setChannelActive('custom');
   });
   dom.lossSlider.addEventListener('input', () => {
     const v = parseFloat(dom.lossSlider.value);
     dom.lossVal.textContent = `${v.toFixed(1)} %`;
     state.scenario.loss_pct = v;
+    setChannelActive('custom');
+  });
+  dom.bwSlider.addEventListener('input', () => {
+    const v = parseInt(dom.bwSlider.value);
+    dom.bwVal.textContent = bwLabel(v);
+    state.scenario.bandwidth_mbps = v;
+    setChannelActive('custom');
+  });
+  dom.channelBtns.querySelectorAll('.btn-channel').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.channel;
+      if (key === 'custom') { setChannelActive('custom'); return; }
+      applyPreset(key);
+    });
   });
 }
 
@@ -260,6 +311,7 @@ dom.applyBtn.addEventListener('click', async () => {
       body: JSON.stringify({
         delay_ms: state.scenario.delay_ms,
         loss_pct: state.scenario.loss_pct,
+        bandwidth_mbps: state.scenario.bandwidth_mbps,
       }),
     });
     const data = await res.json();
@@ -275,7 +327,7 @@ dom.applyBtn.addEventListener('click', async () => {
     resetCardToIdle('cubic');
     resetCardToIdle('bbr');
     document.getElementById('insight-section').style.display = 'none';
-    showToast(`Scenario applicato: ${state.scenario.delay_ms} ms RTT, ${state.scenario.loss_pct.toFixed(1)}% loss`);
+    showToast(`Scenario applicato: ${state.scenario.delay_ms} ms RTT, ${state.scenario.loss_pct.toFixed(1)}% loss, ${bwLabel(state.scenario.bandwidth_mbps)}`);
   } catch (err) {
     showToast(`❌ ${err.message}`, true);
   } finally {
@@ -288,7 +340,7 @@ function setScenarioBadge(applied) {
   if (applied) {
     dom.scenarioDot.className = 'status-dot dot-active';
     dom.scenarioText.textContent =
-      `Scenario attivo: ${state.scenario.delay_ms} ms RTT, ${state.scenario.loss_pct.toFixed(1)}% loss`;
+      `Scenario attivo: ${state.scenario.delay_ms} ms RTT · ${state.scenario.loss_pct.toFixed(1)}% loss · ${bwLabel(state.scenario.bandwidth_mbps)}`;
   } else {
     dom.scenarioDot.className = 'status-dot dot-inactive';
     dom.scenarioText.textContent = 'Scenario non applicato';
@@ -419,17 +471,19 @@ function updateTable() {
   // Group results by scenario key
   const groups = {};
   for (const r of state.allResults) {
-    const key = `${r.scenario.delay_ms}_${r.scenario.loss_pct}`;
+    const bw = r.scenario.bandwidth_mbps ?? 1000;
+    const key = `${r.scenario.delay_ms}_${r.scenario.loss_pct}_${bw}`;
     if (!groups[key]) {
       groups[key] = {
         delay_ms: r.scenario.delay_ms,
         loss_pct: r.scenario.loss_pct,
+        bandwidth_mbps: bw,
         cubic: null, bbr: null,
         ts: r.timestamp,
       };
     }
     groups[key][r.algorithm] = r.avg_mbps;
-    groups[key].ts = r.timestamp;  // latest
+    groups[key].ts = r.timestamp;
   }
 
   const rows = Object.values(groups).sort((a, b) => b.ts.localeCompare(a.ts));
@@ -451,7 +505,7 @@ function updateTable() {
     const ratioText = ratio !== null ? `${ratio.toFixed(2)}×` : '—';
 
     tr.innerHTML = `
-      <td><strong>${g.delay_ms} ms</strong> / ${g.loss_pct.toFixed(1)}%</td>
+      <td><strong>${g.delay_ms} ms</strong> / ${g.loss_pct.toFixed(1)}% / ${bwLabel(g.bandwidth_mbps)}</td>
       <td class="col-cubic">${g.cubic !== null ? g.cubic.toFixed(1) : '—'}</td>
       <td class="col-bbr">${g.bbr   !== null ? g.bbr.toFixed(1)   : '—'}</td>
       <td class="${ratioClass}">${ratioText}</td>
@@ -475,7 +529,7 @@ let idlePacketTimer = null;
 function updateDiagram(applied, delay, loss) {
   const info = document.getElementById('net-link-info');
   if (applied) {
-    info.textContent = `${delay} ms RTT · ${loss.toFixed(1)}% loss`;
+    info.textContent = `${delay} ms RTT · ${loss.toFixed(1)}% loss · ${bwLabel(state.scenario.bandwidth_mbps)}`;
     info.classList.add('active');
     startIdlePackets(loss);
   } else {
