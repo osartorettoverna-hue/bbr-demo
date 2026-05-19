@@ -1,0 +1,40 @@
+name: bbr-demo
+
+networks:
+  bbr_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/24
+
+services:
+  bbr-server:
+    image: bbr-demo-node:latest
+    container_name: bbr-server
+    hostname: bbr-server
+    networks:
+      bbr_net:
+        ipv4_address: 172.28.0.10
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    command: bash -c "iperf3 -s"
+    restart: unless-stopped
+
+  bbr-client:
+    image: bbr-demo-node:latest
+    container_name: bbr-client
+    hostname: bbr-client
+    networks:
+      bbr_net:
+        ipv4_address: 172.28.0.20
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    command: bash -c "sleep infinity"
+    depends_on:
+      - bbr-server
+    restart: unless-stopped

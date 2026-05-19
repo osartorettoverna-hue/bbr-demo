@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TCP BBR vs CUBIC — Demo Telecomunicazioni</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div>
+        <h1>TCP BBR <span class="vs">vs</span> CUBIC</h1>
+        <p class="subtitle">Demo interattiva — Algoritmi di controllo della congestione</p>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-cubic">Loss-based</span>
+        <span class="badge badge-bbr">Model-based</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+
+    <!-- ══════════════════════════════════════════════════════════
+         SEZIONE 1 — SCENARIO DI RETE
+    ═══════════════════════════════════════════════════════════ -->
+    <section class="card" id="scenario-section">
+      <div class="section-header">
+        <span class="section-number">1</span>
+        <h2>Scenario di rete</h2>
+      </div>
+
+      <div class="sliders-row">
+        <div class="slider-group">
+          <div class="slider-label">
+            <span>Latenza (RTT)</span>
+            <strong class="slider-value" id="delay-val">50 ms</strong>
+          </div>
+          <input type="range" id="delay-slider" min="0" max="500" step="1" value="50" class="slider">
+          <div class="slider-hints"><span>0 ms</span><span>500 ms</span></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-label">
+            <span>Packet loss</span>
+            <strong class="slider-value" id="loss-val">1.0 %</strong>
+          </div>
+          <input type="range" id="loss-slider" min="0" max="10" step="0.1" value="1" class="slider">
+          <div class="slider-hints"><span>0%</span><span>10%</span></div>
+        </div>
+      </div>
+
+      <div class="scenario-actions">
+        <button class="btn-primary" id="apply-btn">
+          <span class="btn-icon">⚡</span> Applica scenario
+        </button>
+        <div class="scenario-status" id="scenario-status">
+          <span class="status-dot dot-inactive" id="scenario-dot"></span>
+          <span id="scenario-text">Scenario non applicato</span>
+        </div>
+      </div>
+
+      <!-- Topologia di rete -->
+      <div class="net-diagram" id="net-diagram">
+        <div class="net-box net-box--client" id="net-box-client">
+          <div class="net-box-name">CLIENT</div>
+          <code class="net-box-id">bbr-client</code>
+        </div>
+        <div class="net-link-wrap">
+          <div class="net-link-info" id="net-link-info">Scenario non applicato</div>
+          <div class="net-link" id="net-link">
+            <div class="net-link-track" id="net-link-track"></div>
+          </div>
+          <div class="net-link-tag">tc netem · Docker bridge</div>
+        </div>
+        <div class="net-box net-box--server" id="net-box-server">
+          <div class="net-box-name">SERVER</div>
+          <code class="net-box-id">bbr-server · iperf3</code>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         SEZIONE 2 — TEST TCP
+    ═══════════════════════════════════════════════════════════ -->
+    <section class="card" id="test-section">
+      <div class="section-header">
+        <span class="section-number">2</span>
+        <h2>Test TCP</h2>
+      </div>
+
+      <div class="cards-row">
+
+        <!-- CUBIC card -->
+        <div class="algo-card algo-card--cubic" id="cubic-card">
+          <div class="algo-header">
+            <div class="algo-icon algo-icon--cubic">C</div>
+            <div>
+              <h3 class="algo-title">TCP CUBIC</h3>
+              <p class="algo-subtitle">Loss-based · Linux default dal 2006</p>
+            </div>
+          </div>
+
+          <div class="algo-idle" id="cubic-idle">
+            <div class="algo-desc">
+              Riduce <em>cwnd</em> del 30% ad ogni perdita. Funzione cubica per la crescita della finestra.
+            </div>
+            <button class="btn-test btn-test--cubic" id="cubic-btn">▶ Avvia test (30s)</button>
+          </div>
+
+          <div class="algo-running" id="cubic-running" style="display:none">
+            <div class="progress-wrap">
+              <div class="progress-bar">
+                <div class="progress-fill progress-fill--cubic" id="cubic-fill" style="width:0%"></div>
+              </div>
+              <span class="progress-label" id="cubic-progress-label">0 / 30 s</span>
+            </div>
+            <div class="live-mbps" id="cubic-live">—</div>
+            <div class="live-label">Mbps istantaneo</div>
+          </div>
+
+          <div class="algo-done" id="cubic-done" style="display:none">
+            <div class="result-avg" id="cubic-avg">—</div>
+            <div class="result-avg-label">Mbps medi</div>
+            <div class="result-row">
+              <span class="result-key">Max</span>
+              <span class="result-val" id="cubic-max">—</span>
+            </div>
+            <div class="result-tag" id="cubic-tag"></div>
+            <button class="btn-rerun btn-rerun--cubic" id="cubic-rerun-btn">↺ Ripeti test</button>
+          </div>
+        </div>
+
+        <!-- BBR card -->
+        <div class="algo-card algo-card--bbr" id="bbr-card">
+          <div class="algo-header">
+            <div class="algo-icon algo-icon--bbr">B</div>
+            <div>
+              <h3 class="algo-title">TCP BBR</h3>
+              <p class="algo-subtitle">Model-based · Google, 2016</p>
+            </div>
+          </div>
+
+          <div class="algo-idle" id="bbr-idle">
+            <div class="algo-desc">
+              Stima <em>BDP</em> e <em>RTT</em> propagazione. Ignora le perdite occasionali.
+            </div>
+            <button class="btn-test btn-test--bbr" id="bbr-btn">▶ Avvia test (30s)</button>
+          </div>
+
+          <div class="algo-running" id="bbr-running" style="display:none">
+            <div class="progress-wrap">
+              <div class="progress-bar">
+                <div class="progress-fill progress-fill--bbr" id="bbr-fill" style="width:0%"></div>
+              </div>
+              <span class="progress-label" id="bbr-progress-label">0 / 30 s</span>
+            </div>
+            <div class="live-mbps" id="bbr-live">—</div>
+            <div class="live-label">Mbps istantaneo</div>
+          </div>
+
+          <div class="algo-done" id="bbr-done" style="display:none">
+            <div class="result-avg" id="bbr-avg">—</div>
+            <div class="result-avg-label">Mbps medi</div>
+            <div class="result-row">
+              <span class="result-key">Max</span>
+              <span class="result-val" id="bbr-max">—</span>
+            </div>
+            <div class="result-tag" id="bbr-tag"></div>
+            <button class="btn-rerun btn-rerun--bbr" id="bbr-rerun-btn">↺ Ripeti test</button>
+          </div>
+        </div>
+
+      </div><!-- /cards-row -->
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         SEZIONE 3 — GRAFICO LIVE
+    ═══════════════════════════════════════════════════════════ -->
+    <section class="card" id="chart-section">
+      <div class="section-header">
+        <span class="section-number">3</span>
+        <h2>Throughput in tempo reale</h2>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-dot dot-cubic"></span>CUBIC</span>
+          <span class="legend-item"><span class="legend-dot dot-bbr"></span>BBR</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="throughput-chart"></canvas>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         SEZIONE 3b — PERCHÉ QUESTO COMPORTAMENTO
+    ═══════════════════════════════════════════════════════════ -->
+    <section class="card insight-card" id="insight-section" style="display:none">
+      <div class="section-header">
+        <span class="section-number insight-num">i</span>
+        <h2>Perché questo comportamento?</h2>
+        <span class="insight-scenario-tag" id="insight-tag"></span>
+      </div>
+      <div class="insight-body" id="insight-body"></div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         SEZIONE 4 — STORICO SCENARI
+    ═══════════════════════════════════════════════════════════ -->
+    <section class="card" id="history-section">
+      <div class="section-header">
+        <span class="section-number">4</span>
+        <h2>Storico scenari</h2>
+      </div>
+
+      <div class="table-wrap">
+        <table class="results-table" id="results-table">
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th class="col-cubic">CUBIC (Mbps)</th>
+              <th class="col-bbr">BBR (Mbps)</th>
+              <th>Ratio BBR/CUBIC</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody">
+            <tr class="empty-row" id="empty-row">
+              <td colspan="5">Nessun test eseguito</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="export-row">
+        <button class="btn-export" id="export-current-btn">
+          ⬇ Scarica grafico corrente (PNG)
+        </button>
+        <button class="btn-export" id="export-all-btn">
+          📊 Esporta confronto tutti gli scenari
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════
+       FOOTER
+  ═══════════════════════════════════════════════════════════ -->
+  <footer class="site-footer">
+    <div class="footer-left">
+      <span class="status-dot" id="docker-dot"></span>
+      <span id="docker-text">Connessione Docker...</span>
+    </div>
+    <div class="footer-right">
+      <button class="btn-reset" id="reset-btn">🔄 Reset tutto</button>
+      <button class="btn-help" id="help-btn">?</button>
+    </div>
+  </footer>
+
+  <!-- ══════════════════════════════════════════════════════════
+       MODAL — GUIDA
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="help-modal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Guida concettuale</h2>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <h3>📡 Latenza (RTT)</h3>
+        <p><strong>Round-Trip Time</strong> — tempo che un pacchetto impiega ad andare dal client al server e tornare. Un RTT alto simula link satellitari o intercontinentali. BBR misura continuamente l'<em>RTT di propagazione</em> per stimare il BDP.</p>
+
+        <h3>💥 Packet Loss</h3>
+        <p>Percentuale di pacchetti persi dalla rete (simulata con <code>netem</code>). <strong>CUBIC</strong> interpreta ogni perdita come congestione e dimezza la finestra di congestione. <strong>BBR</strong> non reagisce alle perdite casuali, mantenendo un throughput molto più stabile.</p>
+
+        <h3>⬡ TCP CUBIC</h3>
+        <p>Algoritmo <em>loss-based</em>, default Linux dal kernel 2.6.19 (2006). Usa una funzione cubica per la crescita di <em>cwnd</em>. Al primo segno di perdita, riduce cwnd del 30% (<em>multiplicative decrease</em>). In reti con perdite non legate alla congestione (es. wireless), sovrastima il problema e soffre di throughput basso.</p>
+
+        <h3>◈ TCP BBR v1</h3>
+        <p>Algoritmo <em>model-based</em> di Google (Neal Cardwell et al., 2016). Stima continuamente:</p>
+        <ul>
+          <li><strong>BtlBw</strong> — bottleneck bandwidth massima osservata</li>
+          <li><strong>RTprop</strong> — RTT minimo di propagazione (senza coda)</li>
+        </ul>
+        <p>Mantiene <em>cwnd ≈ BDP = BtlBw × RTprop</em>. Non abbassa la finestra in risposta alle perdite: le ignora se il RTT non aumenta. Su reti con loss elevate BBR può essere 2–100× più efficiente di CUBIC.</p>
+
+        <h3>🔬 Come leggere i risultati</h3>
+        <p>Con loss = 1% e RTT = 50ms, BBR dovrebbe mostrare throughput significativamente superiore a CUBIC. Aumentando il loss (2–5%), il divario cresce. Con loss = 0% e RTT basso, le performance sono simili (la rete è ideale).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifica toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="chart.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
