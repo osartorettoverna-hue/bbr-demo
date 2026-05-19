@@ -1,6 +1,6 @@
 # TCP BBR vs CUBIC — Demo Telecomunicazioni
 
-Demo interattiva per orale universitario. Confronta throughput TCP CUBIC (loss-based) e TCP BBR (model-based) su rete con latenza e packet loss simulati via `netem`.
+Demo interattiva per progetto universitario. Confronta throughput TCP CUBIC (loss-based) e TCP BBR (model-based) su rete con latenza e packet loss simulati via `netem`.
 
 ## Requisiti
 
